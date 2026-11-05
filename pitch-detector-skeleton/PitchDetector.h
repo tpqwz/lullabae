@@ -47,12 +47,14 @@ private:
     int bufferSize_;
     float threshold_;
 
-    // Temporary buffers (reused to avoid allocations on the audio thread)
+    // Reused so detect() does not allocate on the audio thread.
     std::vector<float> yinBuffer_;
-    std::vector<float> window_;
+    std::vector<float> upper_;
+
+    float analyze(const float* samples, int numSamples);
 
     void computeDifferenceFunction(const float* samples, int n);
     void cumulativeMeanNormalizedDifference();
-    int absoluteThreshold() const;
+    int absoluteThreshold(const float* samples, int n) const;
     float parabolicInterpolation(int tau) const;
 };

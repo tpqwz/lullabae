@@ -1,0 +1,93 @@
+name: alpha
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  core:
+    name: Core checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pitch, score, and replay checks
+        working-directory: pitch-detector-skeleton
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -o pitchtest main.cpp PitchDetector.cpp Transcriber.cpp midi.cpp replay.cpp -lm
+          ./pitchtest
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install the SDK pieces the build script pins
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+      - name: Build the APK
+        run: ./android/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lullabae-android
+          path: android/build/lullabae.apk
+
+  web:
+    name: Browser page
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: "3.1.64"
+          actions-cache-folder: emsdk-cache
+      - name: Compile the ear and check it
+        run: ./web/build.sh
+      - name: Pack the page
+        run: |
+          mkdir -p dist
+          zip -j dist/lullabae-web.zip \
+            web/index.html web/app.js web/capture.js web/sw.js \
+            web/manifest.webmanifest web/lullabae.js web/lullabae.wasm \
+            web/icon-192.png web/icon-512.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lullabae-web
+          path: dist/lullabae-web.zip
+
+  release:
+    name: Pre-release
+    needs: [core, android, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Name one archive per platform
+        run: |
+          ver="0.1.0-alpha.${{ github.run_number }}"
+          mv lullabae-android/lullabae.apk "lullabae-android-${ver}.apk"
+          mv lullabae-web/lullabae-web.zip "lullabae-web-${ver}.zip"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0-alpha.${{ github.run_number }}
+          name: 0.1.0-alpha.${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          body: |
+            Alpha build from ${{ github.sha }}.
+
+            `lullabae-android-0.1.0-alpha.${{ github.run_number }}.apk` is the Android app only.
+            `lullabae-web-0.1.0-alpha.${{ github.run_number }}.zip` is the browser page only. Unpack it and serve the folder; opening the html file directly will not load the WebAssembly.
+          files: |
+            lullabae-android-*.apk
+            lullabae-web-*.zip

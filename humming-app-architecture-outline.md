@@ -1,5 +1,5 @@
-# Humming Capture / Pitch Trainer App — Architecture Outline
-## Shared C++ DSP Core + Native UIs  |  or  JUCE
+# lullabae — Architecture Outline
+## Humming capture / pitch trainer  |  Shared C++ DSP core + native UIs, or JUCE
 
 **Goal**: Real-time microphone capture of humming/melody or rhythm taps → pitch detection → transcription into notes/chords/tabs + live pitch training feedback (cents deviation, exercises).
 
@@ -53,7 +53,7 @@
 ### Suggested Starting Architecture (Shared C++ path)
 
 ```
-/humming-app
+lullabae/
 ├── dsp-core/                  # Portable C++ library
 │   ├── include/
 │   │   ├── PitchDetector.h    # YIN / pYIN interface

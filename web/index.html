@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>lullabae</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0E1116">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0E1116;
+    color: #F4EFE6;
+    font: 16px/1.4 system-ui, sans-serif;
+  }
+  main {
+    max-width: 32rem;
+    margin: 0 auto;
+    min-height: 100dvh;
+    padding: 1.4rem 1.15rem calc(1.4rem + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  #status { text-align: center; color: #9AA3B2; letter-spacing: 0.08em; font-size: 0.85rem; }
+  #note { text-align: center; font-size: 4.4rem; line-height: 0.95; margin: 0.15rem 0; font-weight: 460; }
+  #detail { text-align: center; color: #C9C2B6; min-height: 1.4em; }
+  #gauge { margin: 0.3rem 0 0.2rem; }
+  .track { position: relative; height: 2px; background: #2A3140; margin: 1.15rem 0.2rem 0.7rem; }
+  .track i {
+    position: absolute; top: -6px; width: 1px; height: 14px; background: #3A4252;
+  }
+  #marker {
+    position: absolute; top: -8px; width: 16px; height: 16px; margin-left: -8px;
+    border-radius: 50%; background: #8FCBB0; left: 50%;
+  }
+  .labels { display: flex; justify-content: space-between; color: #6E7684; font-size: 0.78rem; }
+  #score {
+    display: flex; gap: 0.5rem; overflow-x: auto; align-items: flex-start;
+    min-height: 7.6rem; padding: 0.35rem 0 0.2rem; scrollbar-width: none;
+  }
+  #score::-webkit-scrollbar { display: none; }
+  #empty { color: #6E7684; text-align: center; width: 100%; padding: 2.4rem 0.5rem; }
+  .card {
+    background: #1A1E26; border-radius: 1rem; height: 7.25rem; flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.28rem; padding: 0.5rem 0.7rem; min-width: 5.4rem;
+  }
+  .card b { font-size: 1.35rem; font-weight: 520; }
+  .card .cents { color: #E3C28A; font-size: 0.78rem; min-height: 1em; }
+  .card .tab { color: #8FCBB0; letter-spacing: 0.04em; }
+  #aref { text-align: center; color: #C9C2B6; margin-top: 0.4rem; }
+  input[type="range"] { width: 100%; accent-color: #8FCBB0; }
+  .row { display: flex; gap: 0.7rem; }
+  button {
+    flex: 0 0 auto; width: 100%; border: 0; border-radius: 999px; padding: 0.9rem 0.6rem;
+    background: #1A1E26; color: inherit; font: inherit; cursor: pointer;
+  }
+  .row button { flex: 1 1 0; width: auto; }
+  button.on { background: #24362E; }
+  button:disabled { opacity: 0.45; }
+  #hint { color: #6E7684; font-size: 0.85rem; text-align: center; margin: 0.4rem 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <div id="status">Ready</div>
+  <div id="note">—</div>
+  <div id="detail"></div>
+  <div id="gauge">
+    <div class="track" id="track">
+      <i style="left:10%"></i><i style="left:30%"></i><i style="left:50%"></i>
+      <i style="left:70%"></i><i style="left:90%"></i>
+      <div id="marker"></div>
+    </div>
+    <div class="labels"><span>flat</span><span>in tune</span><span>sharp</span></div>
+  </div>
+  <div id="score"><div id="empty">hum a melody, or tap a beat</div></div>
+  <div id="aref">A = 440 Hz</div>
+  <input id="a4" type="range" min="400" max="480" value="440" aria-label="Tuning pitch">
+  <div class="row">
+    <button id="lullaby" type="button">Lullaby</button>
+    <button id="listen" type="button">Listen</button>
+  </div>
+  <button id="save" type="button" disabled>Download MIDI</button>
+  <p id="hint">A finished note is written down, with its fret. A tap with no pitch is a beat. Audio stays on this device.</p>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

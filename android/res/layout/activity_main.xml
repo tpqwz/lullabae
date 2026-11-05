@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0E1116"
+    android:gravity="center_horizontal"
+    android:keepScreenOn="true"
+    android:orientation="vertical"
+    android:paddingLeft="28dp"
+    android:paddingTop="56dp"
+    android:paddingRight="28dp"
+    android:paddingBottom="28dp">
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:letterSpacing="0.12"
+        android:text="Lullaby"
+        android:textColor="#8B93A1"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/note"
+        android:layout_width="match_parent"
+        android:layout_height="88dp"
+        android:layout_marginTop="8dp"
+        android:autoSizeMaxTextSize="96sp"
+        android:autoSizeMinTextSize="48sp"
+        android:autoSizeStepGranularity="2sp"
+        android:autoSizeTextType="uniform"
+        android:fontFamily="sans-serif-light"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text="—"
+        android:textColor="#F4EFE6" />
+
+    <TextView
+        android:id="@+id/detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:textColor="#C9C1B6"
+        android:textSize="18sp" />
+
+    <dev.lullabae.GaugeView
+        android:id="@+id/gauge"
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:layout_marginTop="8dp" />
+
+    <HorizontalScrollView
+        android:id="@+id/score_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <dev.lullabae.ScoreView
+            android:id="@+id/score"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent" />
+    </HorizontalScrollView>
+
+    <TextView
+        android:id="@+id/reference_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="A = 440 Hz"
+        android:textColor="#C9C1B6"
+        android:textSize="16sp" />
+
+    <SeekBar
+        android:id="@+id/reference"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:max="480"
+        android:min="400"
+        android:progress="440"
+        android:progressBackgroundTint="#2A3140"
+        android:progressTint="#8FCBB0"
+        android:thumbTint="#F4EFE6" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/demo"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:defaultFocusHighlightEnabled="false"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="Songs"
+            android:textColor="#F4EFE6"
+            android:textSize="16sp" />
+
+        <View
+            android:layout_width="12dp"
+            android:layout_height="0dp" />
+
+        <TextView
+            android:id="@+id/listen"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:defaultFocusHighlightEnabled="false"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="Listen"
+            android:textColor="#F4EFE6"
+            android:textSize="16sp" />
+
+        <View
+            android:layout_width="12dp"
+            android:layout_height="0dp" />
+
+        <TextView
+            android:id="@+id/replay"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:defaultFocusHighlightEnabled="false"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="Replay"
+            android:textColor="#F4EFE6"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:gravity="center"
+        android:text="Songs plays a lullaby, then Twinkle, then Amazing Grace. Replay sings a take back."
+        android:textColor="#6E7684"
+        android:textSize="13sp" />
+</LinearLayout>
