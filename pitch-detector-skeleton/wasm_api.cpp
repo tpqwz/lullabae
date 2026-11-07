@@ -27,7 +27,7 @@ extern "C" {
 
 void lb_init(double sampleRate, float a4) {
     delete detector;
-    detector = new PitchDetector(sampleRate > 0 ? sampleRate : 48000.0, 2048, 0.15f);
+    detector = new PitchDetector(sampleRate > 0 ? sampleRate : 48000.0, 2048);
     transcriber.reset(a4 > 0 ? a4 : 440.0f);
     clockSec = 0;
     taken.clear();

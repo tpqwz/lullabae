@@ -9,7 +9,7 @@ namespace {
 
 const double kAttackSec = 0.08;
 const double kMinNoteSec = 0.10;
-const double kTapGapSec = 0.12;
+const double kTapGapSec = 0.40;
 const float kNoteFloor = 0.008f;
 const float kTapRms = 0.15f;
 const int kStickCents = 75;

@@ -27,10 +27,13 @@ public class MainActivity extends Activity implements Engine.Listener {
     private TextView demoButton;
     private TextView listenButton;
     private TextView replayButton;
+    private TextView waveButton;
+    private WaveView waveView;
 
     private boolean listening;
     private boolean replaying;
     private boolean wantMic;
+    private boolean showWave;
     private final ArrayList<Tone> tones = new ArrayList<>();
     private String lastLog = "";
     private float heldHz = Float.NaN;
@@ -44,15 +47,23 @@ public class MainActivity extends Activity implements Engine.Listener {
         detailView = findViewById(R.id.detail);
         gauge = findViewById(R.id.gauge);
         score = findViewById(R.id.score);
+        score.setEditor(this::correct);
         demoButton = findViewById(R.id.demo);
         listenButton = findViewById(R.id.listen);
         replayButton = findViewById(R.id.replay);
+        waveButton = findViewById(R.id.wave_toggle);
+        waveView = findViewById(R.id.wave);
         TextView referenceLabel = findViewById(R.id.reference_label);
         SeekBar reference = findViewById(R.id.reference);
 
         demoButton.setOnClickListener(v -> startDemo());
         listenButton.setOnClickListener(v -> requestListen());
         replayButton.setOnClickListener(v -> playReplay());
+        waveButton.setOnClickListener(v -> {
+            showWave = !showWave;
+            engine.setShowWave(showWave);
+            styleButtons();
+        });
         reference.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
@@ -114,6 +125,7 @@ public class MainActivity extends Activity implements Engine.Listener {
 
     private void playReplay() {
         if (tones.isEmpty()) {
+            Log.i(TAG, "replay empty");
             return;
         }
         int n = tones.size();
@@ -205,6 +217,55 @@ public class MainActivity extends Activity implements Engine.Listener {
         Log.i(TAG, "wrote " + name + " string " + stringNum + " fret " + fret + " " + durationMs + "ms");
     }
 
+    /** The ear wrote this pitch. The correction is the note replay will sing. */
+    private void correct(int noteOrdinal, int steps) {
+        int index = tones.size() - score.noteCount() + noteOrdinal;
+        if (index < 0 || index >= tones.size() || steps == 0) {
+            return;
+        }
+        Tone tone = tones.get(index);
+        int midi = tone.midi + steps;
+        if (midi < 0 || midi > 127) {
+            return;
+        }
+        String before = noteName(tone.midi);
+        tone.midi = midi;
+        tone.cents = 0;
+        int[] placed = placeOnGuitar(midi);
+        String name = noteName(midi);
+        score.replaceNote(noteOrdinal, name, 0, placed[0], placed[1]);
+        Log.i(TAG, "corrected " + before + " to " + name);
+    }
+
+    private static String noteName(int midi) {
+        String[] names = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        int clamped = Math.max(0, Math.min(127, midi));
+        return names[clamped % 12] + (clamped / 12 - 1);
+    }
+
+    /** Same neck rule as the transcriber: open midi high-e through low-E. */
+    private static int[] placeOnGuitar(int midi) {
+        int[] openMidi = {64, 59, 55, 50, 45, 40};
+        int string = 0;
+        int fret = 0;
+        int bestFret = 99;
+        for (int i = 0; i < openMidi.length; i++) {
+            int candidate = midi - openMidi[i];
+            if (candidate < 0 || candidate > 15) {
+                continue;
+            }
+            if (candidate <= 5) {
+                return new int[]{i + 1, candidate};
+            }
+            if (candidate < bestFret) {
+                bestFret = candidate;
+                string = i + 1;
+                fret = candidate;
+            }
+        }
+        return new int[]{string, fret};
+    }
+
     @Override
     public void onTap() {
         score.addTap();
@@ -222,6 +283,14 @@ public class MainActivity extends Activity implements Engine.Listener {
     public void onReplayFinished() {
         replaying = false;
         styleButtons();
+    }
+
+    @Override
+    public void onWave(float[] points) {
+        if (!showWave || !listening) {
+            return;
+        }
+        waveView.setSamples(points);
     }
 
     /** Keep a tenth-of-a-hertz reading from flickering across a rounding boundary. */
@@ -253,7 +322,9 @@ public class MainActivity extends Activity implements Engine.Listener {
         paint(demoButton, !listening && !replaying);
         paint(listenButton, listening);
         paint(replayButton, replaying);
+        paint(waveButton, showWave);
         replayButton.setAlpha(tones.isEmpty() ? 0.45f : 1f);
+        waveView.setVisibility(showWave && listening ? View.VISIBLE : View.GONE);
     }
 
     private static final class Tone {

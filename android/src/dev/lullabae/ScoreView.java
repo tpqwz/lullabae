@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.HorizontalScrollView;
 
@@ -12,6 +13,10 @@ import java.util.ArrayList;
 
 /** Notes and taps already heard, left to right. A fret sits under each note. */
 public class ScoreView extends View {
+    /** A tap on a written note asks for that note to move by one semitone. */
+    public interface Editor {
+        void onShift(int noteOrdinal, int steps);
+    }
     private static final String[] STRINGS = {"", "e", "B", "G", "D", "A", "E"};
 
     private static final class Item {
@@ -24,6 +29,9 @@ public class ScoreView extends View {
     }
 
     private final ArrayList<Item> items = new ArrayList<>();
+    private Editor editor;
+    private float downX;
+    private float downY;
     private final Paint card = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint namePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint tabPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -51,6 +59,11 @@ public class ScoreView extends View {
         tabPaint.setTextAlign(Paint.Align.CENTER);
         centsPaint.setTextAlign(Paint.Align.CENTER);
         emptyPaint.setTextAlign(Paint.Align.CENTER);
+        setClickable(true);
+    }
+
+    public void setEditor(Editor editor) {
+        this.editor = editor;
     }
 
     public void clear() {
@@ -89,6 +102,83 @@ public class ScoreView extends View {
                 ((HorizontalScrollView) getParent()).fullScroll(View.FOCUS_RIGHT);
             }
         });
+    }
+
+    public int noteCount() {
+        int count = 0;
+        for (Item item : items) {
+            if (!item.tap) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Replace the written name on one note card. noteOrdinal counts notes, not taps. */
+    public void replaceNote(int noteOrdinal, String name, int cents, int stringNum, int fret) {
+        int seen = 0;
+        for (Item item : items) {
+            if (item.tap) {
+                continue;
+            }
+            if (seen == noteOrdinal) {
+                item.name = name;
+                item.cents = cents;
+                item.stringNum = stringNum;
+                item.fret = fret;
+                invalidate();
+                return;
+            }
+            seen++;
+        }
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (items.isEmpty()) {
+            return super.onTouchEvent(event);
+        }
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+            downX = event.getX();
+            downY = event.getY();
+            return true;
+        }
+        if (event.getAction() != MotionEvent.ACTION_UP) {
+            return true;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        float dx = event.getX() - downX;
+        float dy = event.getY() - downY;
+        if (dx * dx + dy * dy > 24 * density * 24 * density) {
+            return true;
+        }
+        shiftAt(event.getX(), density);
+        return true;
+    }
+
+    private void shiftAt(float x, float density) {
+        if (editor == null) {
+            return;
+        }
+        float cursor = 8 * density;
+        float top = 8 * density;
+        float cardHeight = Math.min(getHeight() - 16 * density, 116 * density);
+        int noteOrdinal = 0;
+        for (Item item : items) {
+            float width = cellWidth(item, density);
+            if (x >= cursor && x < cursor + width) {
+                if (item.tap) {
+                    return;
+                }
+                int steps = x < cursor + width / 2f ? -1 : 1;
+                editor.onShift(noteOrdinal, steps);
+                return;
+            }
+            if (!item.tap) {
+                noteOrdinal++;
+            }
+            cursor += width + 8 * density;
+        }
     }
 
     @Override

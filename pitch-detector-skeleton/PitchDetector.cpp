@@ -147,7 +147,18 @@ int PitchDetector::absoluteThreshold(const float* samples, int n) const
 
     for (int tau = minTau; tau < maxTau; ++tau) {
         if (yinBuffer_[tau] < threshold_) {
-            // Find local minimum
+            // A one-sample bump on the way into the dip used to stop the search
+            // a semitone sharp. Take the deepest point in the next slice of the
+            // period, then finish the walk into that valley.
+            int reach = tau + std::max(8, tau / 8);
+            if (reach >= maxTau) {
+                reach = maxTau - 1;
+            }
+            for (int k = tau + 1; k <= reach; ++k) {
+                if (yinBuffer_[k] < yinBuffer_[tau]) {
+                    tau = k;
+                }
+            }
             while (tau + 1 < maxTau && yinBuffer_[tau + 1] < yinBuffer_[tau]) {
                 ++tau;
             }

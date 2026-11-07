@@ -3,9 +3,12 @@ import createLullabae from "./lullabae.js";
 const WINDOW = 2048;
 const HOP = 1024;
 const STRINGS = ["", "e", "B", "G", "D", "A", "E"];
+// Opening of the Weiss menuet in D. midi, cents, milliseconds.
 const PHRASE = [
-  [64, 0], [64, 14], [67, -18], [64, 0],
-  [69, 8], [67, 0], [62, -12], [60, 0],
+  [66, 0, 250], [67, 0, 250], [69, 0, 500], [62, 0, 500],
+  [61, 0, 1000], [61, 0, 250], [62, 0, 250], [62, 0, 250],
+  [64, 0, 500], [64, 0, 250], [69, 0, 250], [67, 0, 250],
+  [66, 0, 250], [67, 0, 250], [66, 0, 250], [64, 0, 250], [62, 0, 500],
 ];
 
 const statusEl = document.getElementById("status");
@@ -98,7 +101,7 @@ function showLive(hz, rms) {
     noteEl.textContent = "—";
     detailEl.textContent = mode === "listen" ? "hum a note" : "";
     placeMarker(0, false);
-    statusEl.textContent = mode === "listen" ? "Quiet" : mode === "lullaby" ? "Lullaby" : "Ready";
+    statusEl.textContent = mode === "listen" ? "Quiet" : mode === "lullaby" ? "Weiss Menuet" : "Ready";
     return;
   }
   if (!Number.isFinite(heldHz) || Math.abs(hz - heldHz) >= 0.35) {
@@ -112,7 +115,7 @@ function showLive(hz, rms) {
   const bias = cents === 0 ? "in tune" : cents > 0 ? `${cents} cents sharp` : `${Math.abs(cents)} cents flat`;
   detailEl.textContent = `${bias} · ${heldHz.toFixed(1)} Hz`;
   placeMarker(cents, true);
-  statusEl.textContent = mode === "listen" ? "Listening" : "Lullaby";
+  statusEl.textContent = mode === "listen" ? "Listening" : "Weiss Menuet";
 }
 
 function placeMarker(cents, voiced) {
@@ -160,24 +163,28 @@ function accept(line) {
 }
 
 function renderPhrase(rate) {
-  const noteSamples = Math.round(0.75 * rate);
   const fade = Math.max(1, Math.round(rate / 100));
-  const tone = noteSamples * PHRASE.length;
+  const spans = PHRASE.map((step) => {
+    const ms = step.length > 2 ? step[2] : 750;
+    return { midi: step[0], cents: step[1], n: Math.max(1, Math.round((rate * ms) / 1000)) };
+  });
+  const tone = spans.reduce((sum, step) => sum + step.n, 0);
   const tail = Math.round(0.25 * rate);
   const out = new Float32Array(tone + tail);
   let phase = 0;
-  for (let i = 0; i < tone; i++) {
-    const at = i % noteSamples;
-    const step = PHRASE[(i / noteSamples) | 0];
-    const hz = a4 * 2 ** ((step[0] - 69) / 12 + step[1] / 1200);
-    let gain = 1;
-    if (at < fade) {
-      gain = at / fade;
-    } else if (noteSamples - at < fade) {
-      gain = (noteSamples - at) / fade;
+  let at = 0;
+  for (const step of spans) {
+    for (let i = 0; i < step.n; i++) {
+      let gain = 1;
+      if (i < fade) {
+        gain = i / fade;
+      } else if (step.n - i < fade) {
+        gain = (step.n - i) / fade;
+      }
+      const hz = a4 * 2 ** ((step.midi - 69) / 12 + step.cents / 1200);
+      phase += (2 * Math.PI * hz) / rate;
+      out[at++] = 0.22 * gain * Math.sin(phase);
     }
-    phase += (2 * Math.PI * hz) / rate;
-    out[i] = 0.22 * gain * Math.sin(phase);
   }
   return out;
 }

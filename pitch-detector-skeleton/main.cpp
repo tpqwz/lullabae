@@ -12,6 +12,7 @@
 #include <vector>
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 
 #ifndef M_PI
@@ -260,6 +261,73 @@ int main()
         if (n != 1 || ev[0].tap != 1) {
             std::cout << "FAIL: lap tap -> " << n << " events\n";
             g_failed = 1;
+        }
+
+        // Three loud spikes a sixth of a second apart are one beat, not a roll.
+        // A rattling microphone was writing a tap on every spike and burying the take.
+        t.reset(440.0f);
+        n = 0;
+        for (int i = 0; i < 3; ++i) {
+            n = feed(t, 0.0f, 0.01f, 0.16, ev, n, 8);
+            n = feed(t, 0.0f, 0.45f, 0.04, ev, n, 8);
+        }
+        n = feed(t, 0.0f, 0.01f, 0.20, ev, n, 8);
+        if (n != 1 || ev[0].tap != 1) {
+            std::cout << "FAIL: close spikes -> " << n << " events\n";
+            g_failed = 1;
+        }
+
+        // A hummed G3 with room noise is a note. It used to miss the pitch and
+        // write a tap instead, so the score never showed the melody.
+        {
+            const int sr = 48000;
+            const int hop = 1024;
+            const int win = 2048;
+            const int total = sr * 18 / 10;
+            std::vector<float> wave(total);
+            uint32_t rnd = 1;
+            for (int i = 0; i < total; ++i) {
+                rnd ^= rnd << 13;
+                rnd ^= rnd >> 17;
+                rnd ^= rnd << 5;
+                float s = 0.15f * ((((rnd >> 8) & 0xffff) / 32768.0f) - 1.0f);
+                if (i > sr / 5 && i < sr / 5 + sr) {
+                    double ph = 2.0 * M_PI * 196.0 * i / sr;
+                    float tone = static_cast<float>(std::sin(ph) + 0.5 * std::sin(2.0 * ph)
+                            + 0.25 * std::sin(3.0 * ph) + 0.12 * std::sin(4.0 * ph));
+                    s += 0.30f * tone / 1.87f;
+                }
+                wave[i] = s;
+            }
+            PitchDetector ear(sr, win);
+            Transcriber heard;
+            heard.reset(440.0f);
+            TranscriptEvent got[8];
+            int count = 0;
+            for (int at = 0; at + win <= total && count < 8; at += hop) {
+                float hz = ear.detect(wave.data() + at, win);
+                float energy = 0.0f;
+                for (int i = 0; i < hop; ++i) {
+                    float v = wave[at + win - hop + i];
+                    energy += v * v;
+                }
+                float rms = std::sqrt(energy / hop);
+                count += heard.push(hz, rms, hop / static_cast<double>(sr), got + count, 8 - count);
+            }
+            int humTaps = 0;
+            for (int i = 0; i < count; ++i) {
+                if (got[i].tap) {
+                    humTaps += 1;
+                }
+            }
+            if (count != 1 || humTaps != 0 || std::strcmp(got[0].name, "G3") != 0) {
+                std::cout << "FAIL: noisy hum -> " << count << " events, " << humTaps << " taps";
+                if (count > 0) {
+                    std::cout << " first " << got[0].name << " tap " << got[0].tap;
+                }
+                std::cout << "\n";
+                g_failed = 1;
+            }
         }
 
         // One loud hop and then a pitch is the start of a note, not a beat.

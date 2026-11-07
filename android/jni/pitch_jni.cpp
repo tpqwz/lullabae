@@ -18,7 +18,7 @@ static std::mutex g_transcriptLock;
 extern "C" JNIEXPORT void JNICALL
 Java_dev_lullabae_Pitch_init(JNIEnv*, jclass, jdouble sample_rate) {
     delete g_detector;
-    g_detector = new PitchDetector(sample_rate, 2048, 0.15f);
+    g_detector = new PitchDetector(sample_rate, 2048);
 }
 
 extern "C" JNIEXPORT jfloat JNICALL

@@ -19,11 +19,11 @@ public:
     /**
      * @param sampleRate   Audio sample rate in Hz (e.g. 44100 or 48000)
      * @param bufferSize   Analysis window size (power of 2 recommended, 1024–4096)
-     * @param threshold    YIN threshold (typical 0.10–0.15)
+     * @param threshold    YIN threshold. 0.35 still hears a hum in room noise.
      */
     PitchDetector(double sampleRate,
                   int bufferSize = 2048,
-                  float threshold = 0.15f);
+                  float threshold = 0.35f);
 
     /**
      * Detect fundamental frequency from a buffer of mono float samples in [-1, 1].
