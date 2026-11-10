@@ -17,7 +17,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:letterSpacing="0.12"
-        android:text="Weiss Menuet"
+        android:text="Ready"
         android:textColor="#8B93A1"
         android:textSize="14sp" />
 
@@ -58,20 +58,38 @@
         android:layout_marginTop="4dp"
         android:visibility="gone" />
 
-    <HorizontalScrollView
-        android:id="@+id/score_scroll"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="8dp"
-        android:layout_weight="1"
-        android:fillViewport="true"
-        android:scrollbars="none">
+        android:layout_weight="1">
 
-        <dev.lullabae.ScoreView
-            android:id="@+id/score"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent" />
-    </HorizontalScrollView>
+        <HorizontalScrollView
+            android:id="@+id/score_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+            <dev.lullabae.ScoreView
+                android:id="@+id/score"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent" />
+        </HorizontalScrollView>
+
+        <ScrollView
+            android:id="@+id/takes_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/takes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -88,6 +106,19 @@
             android:text="A = 440 Hz"
             android:textColor="#C9C1B6"
             android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/midi"
+            android:layout_width="72dp"
+            android:layout_height="36dp"
+            android:layout_marginRight="8dp"
+            android:clickable="true"
+            android:defaultFocusHighlightEnabled="false"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="MIDI"
+            android:textColor="#F4EFE6"
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/wave_toggle"
@@ -165,6 +196,23 @@
             android:text="Replay"
             android:textColor="#F4EFE6"
             android:textSize="16sp" />
+
+        <View
+            android:layout_width="12dp"
+            android:layout_height="0dp" />
+
+        <TextView
+            android:id="@+id/takes_button"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:defaultFocusHighlightEnabled="false"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="Takes"
+            android:textColor="#F4EFE6"
+            android:textSize="16sp" />
     </LinearLayout>
 
     <TextView
@@ -172,7 +220,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="18dp"
         android:gravity="center"
-        android:text="Tap the left of a written note to lower it, the right to raise it. Replay sings that corrected take."
+        android:text="Tap the left of a written note to lower it, the right to raise it. A take is saved when you stop. Takes lists them. Hold MIDI to share the open one."
         android:textColor="#6E7684"
         android:textSize="13sp" />
 </LinearLayout>

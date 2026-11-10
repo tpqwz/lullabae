@@ -53,12 +53,16 @@ void Transcriber::setTuning(float a4) {
 
 void Transcriber::reset(float a4) {
     a4_ = a4 > 0.0f ? a4 : 440.0f;
+    clockSec_ = 0;
     active_ = -1;
     activeSec_ = 0;
+    activeStart_ = 0;
     centsSum_ = 0;
     centsN_ = 0;
     pending_ = -1;
     pendingSec_ = 0;
+    challenger_ = -1;
+    challengerSec_ = 0;
     sinceTap_ = 1;
     noise_ = 0.01;
     restSec_ = 0;
@@ -191,11 +195,71 @@ int Transcriber::finish(int written, TranscriptEvent* out, int maxOut, int midi,
     return written;
 }
 
+int Transcriber::flush(TranscriptEvent* out, int maxOut) {
+    if (out == nullptr || maxOut <= 0) {
+        return 0;
+    }
+    if (tapHold_ && phraseN_ < 48) {
+        TranscriptEvent event{};
+        event.tap = 1;
+        event.midi = -1;
+        event.durationMs = static_cast<int>(std::lround(tapHoldSec_ * 1000.0));
+        event.startMs = static_cast<int>(std::lround((clockSec_ - tapHoldSec_) * 1000.0));
+        if (event.startMs < 0) {
+            event.startMs = 0;
+        }
+        queue(event);
+        tapHold_ = false;
+        tapHoldSec_ = 0;
+        sinceTap_ = 0;
+    }
+    if (active_ >= 0 && activeSec_ >= kMinNoteSec && phraseN_ < 48) {
+        TranscriptEvent event{};
+        event.tap = 0;
+        event.midi = active_;
+        event.cents = centsN_ > 0 ? static_cast<int>(std::lround(centsSum_ / centsN_)) : 0;
+        event.durationMs = static_cast<int>(std::lround(activeSec_ * 1000.0));
+        event.startMs = static_cast<int>(std::lround(activeStart_ * 1000.0));
+        if (event.startMs < 0) {
+            event.startMs = 0;
+        }
+        event.guitarString = string_;
+        event.fret = fret_;
+        std::memcpy(event.name, name_, sizeof event.name);
+        queue(event);
+    }
+    active_ = -1;
+    activeSec_ = 0;
+    centsSum_ = 0;
+    centsN_ = 0;
+    pending_ = -1;
+    pendingSec_ = 0;
+    challenger_ = -1;
+    challengerSec_ = 0;
+    name_[0] = '\0';
+    string_ = 0;
+    fret_ = 0;
+    if (phraseN_ >= 2) {
+        phraseN_ = foldPhrase(phrase_, phraseN_);
+    }
+    int n = phraseN_;
+    if (n > maxOut) {
+        n = maxOut;
+    }
+    for (int i = 0; i < n; ++i) {
+        out[i] = phrase_[i];
+    }
+    phraseN_ = 0;
+    restSec_ = 0;
+    return n;
+}
+
 int Transcriber::push(float hz, float rms, double hopSec, TranscriptEvent* out, int maxOut) {
     if (hopSec <= 0.0 || out == nullptr || maxOut <= 0) {
         return 0;
     }
 
+    clockSec_ += hopSec;
     sinceTap_ += hopSec;
 
     int midi = -1;
@@ -216,16 +280,48 @@ int Transcriber::push(float hz, float rms, double hopSec, TranscriptEvent* out, 
         if (note.midi >= 0) {
             // A slow wobble across the rounding line is still this note.
             // A real step of a semitone is about 100 cents, past this margin.
+            // A step that does not stay for the attack is chatter, not a new note.
             int held = active_ >= 0 ? active_ : pending_;
             if (held >= 0 && note.midi != held) {
                 int fromHeld = (note.midi - held) * 100 + note.cents;
-                if (fromHeld > -kStickCents && fromHeld < kStickCents) {
+                bool close = fromHeld > -kStickCents && fromHeld < kStickCents;
+                if (!close) {
+                    if (challenger_ != note.midi) {
+                        challenger_ = note.midi;
+                        challengerSec_ = 0;
+                    }
+                    challengerSec_ += hopSec;
+                    // A flare at the 2nd, 3rd, or 4th harmonic of the note
+                    // being sung has to stay. A real step does not.
+                    double need = kAttackSec;
+                    const float heldHz = a4_ * static_cast<float>(std::pow(2.0, (held - 69) / 12.0));
+                    double ratio = static_cast<double>(hz) / static_cast<double>(heldHz);
+                    if (ratio < 1.0) {
+                        ratio = 1.0 / ratio;
+                    }
+                    for (int multiple = 2; multiple <= 4; ++multiple) {
+                        const double cents = std::abs(1200.0 * std::log2(ratio / multiple));
+                        if (cents < 60.0) {
+                            need = 0.30;
+                            break;
+                        }
+                    }
+                    close = challengerSec_ < need;
+                } else {
+                    challenger_ = -1;
+                    challengerSec_ = 0;
+                }
+                if (close) {
                     float heldHz = a4_ * static_cast<float>(std::pow(2.0, (held - 69) / 12.0));
                     Note named = noteFromHz(heldHz, a4_);
                     note.midi = held;
-                    note.cents = fromHeld;
+                    // A leap that has not stayed does not get a vote on the pitch.
+                    note.cents = (fromHeld > -kStickCents && fromHeld < kStickCents) ? fromHeld : 0;
                     std::memcpy(note.name, named.name, sizeof note.name);
                 }
+            } else {
+                challenger_ = -1;
+                challengerSec_ = 0;
             }
             midi = note.midi;
             cents = note.cents;
@@ -255,6 +351,10 @@ int Transcriber::push(float hz, float rms, double hopSec, TranscriptEvent* out, 
         event.midi = -1;
         event.cents = 0;
         event.durationMs = static_cast<int>(std::lround(tapHoldSec_ * 1000.0));
+        event.startMs = static_cast<int>(std::lround((clockSec_ - tapHoldSec_) * 1000.0));
+        if (event.startMs < 0) {
+            event.startMs = 0;
+        }
         event.guitarString = 0;
         event.fret = 0;
         event.name[0] = '\0';
@@ -272,15 +372,21 @@ int Transcriber::push(float hz, float rms, double hopSec, TranscriptEvent* out, 
     }
 
     if (midi == active_) {
+        // A leap that has not stayed is still this note, but it must not
+        // stretch the note or pull its pitch. A scoop and a bass poke rely
+        // on the length of the note they interrupt.
+        bool leap = challenger_ >= 0 && challengerSec_ < kAttackSec;
         pending_ = active_;
         pendingSec_ = 0;
-        activeSec_ += hopSec;
-        if (midi >= 0) {
-            centsSum_ += cents;
-            centsN_ += 1;
-            std::memcpy(name_, name, sizeof name_);
-            string_ = string;
-            fret_ = fret;
+        if (!leap) {
+            activeSec_ += hopSec;
+            if (midi >= 0) {
+                centsSum_ += cents;
+                centsN_ += 1;
+                std::memcpy(name_, name, sizeof name_);
+                string_ = string;
+                fret_ = fret;
+            }
         }
         return finish(written, out, maxOut, midi, hopSec);
     }
@@ -300,6 +406,10 @@ int Transcriber::push(float hz, float rms, double hopSec, TranscriptEvent* out, 
         event.midi = active_;
         event.cents = centsN_ > 0 ? static_cast<int>(std::lround(centsSum_ / centsN_)) : 0;
         event.durationMs = static_cast<int>(std::lround(activeSec_ * 1000.0));
+        event.startMs = static_cast<int>(std::lround(activeStart_ * 1000.0));
+        if (event.startMs < 0) {
+            event.startMs = 0;
+        }
         event.guitarString = string_;
         event.fret = fret_;
         std::memcpy(event.name, name_, sizeof event.name);
@@ -314,6 +424,7 @@ int Transcriber::push(float hz, float rms, double hopSec, TranscriptEvent* out, 
         tapHoldSec_ = 0;
     }
     if (midi >= 0) {
+        activeStart_ = clockSec_ - pendingSec_;
         centsSum_ = cents;
         centsN_ = 1;
         std::memcpy(name_, name, sizeof name_);

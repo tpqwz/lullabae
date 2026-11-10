@@ -117,6 +117,76 @@ static void expectThirdHarmonic(PitchDetector& detector, double sampleRate, int 
     }
 }
 
+// A sung phrase: harmonics and a slow vibrato, one voice, no second part.
+// Opening of Home on the Range, written in C.
+static void expectSungPhrase()
+{
+    const int sr = 48000;
+    const int hop = 1024;
+    const int win = 2048;
+    const float seq[] = {
+        261.6255653006f, 261.6255653006f, 391.9954359817f, 329.6275569129f,
+        391.9954359817f, 391.9954359817f, 349.2282314330f, 329.6275569129f,
+        293.6647679174f, 329.6275569129f, 349.2282314330f, 391.9954359817f,
+        329.6275569129f, 261.6255653006f,
+    };
+    const char* expect[] = {
+        "C4", "C4", "G4", "E4", "G4", "G4", "F4", "E4", "D4", "E4", "F4", "G4", "E4", "C4",
+    };
+    const int notes = 14;
+    std::vector<float> wave;
+    double phase = 0.0;
+    for (int n = 0; n < notes; ++n) {
+        int len = static_cast<int>(0.36 * sr);
+        for (int i = 0; i < len; ++i) {
+            double t = wave.size() / static_cast<double>(sr);
+            double f = seq[n] * std::pow(2.0, 0.015 * std::sin(2.0 * M_PI * 5.2 * t));
+            phase += 2.0 * M_PI * f / sr;
+            float s = static_cast<float>(std::sin(phase) + 0.5 * std::sin(2.0 * phase)
+                    + 0.25 * std::sin(3.0 * phase) + 0.12 * std::sin(4.0 * phase));
+            wave.push_back(s / 1.87f * 0.22f);
+        }
+        wave.insert(wave.end(), static_cast<size_t>(0.12 * sr), 0.0f);
+    }
+    wave.insert(wave.end(), static_cast<size_t>(0.6 * sr), 0.0f);
+    PitchDetector ear(sr, win);
+    Transcriber heard;
+    heard.reset(440.0f);
+    int got = 0;
+    bool bad = false;
+    for (int at = 0; at + win < static_cast<int>(wave.size()); at += hop) {
+        float hz = ear.detect(wave.data() + at, win);
+        float energy = 0.0f;
+        for (int i = 0; i < hop; ++i) {
+            float v = wave[at + win - hop + i];
+            energy += v * v;
+        }
+        TranscriptEvent ev[4];
+        int count = heard.push(hz, std::sqrt(energy / hop), hop / static_cast<double>(sr), ev, 4);
+        for (int i = 0; i < count; ++i) {
+            if (ev[i].tap) {
+                continue;
+            }
+            if (got >= notes || std::strcmp(ev[i].name, expect[got]) != 0) {
+                std::cout << "FAIL: sung phrase note " << got << " is " << ev[i].name;
+                if (got < notes) {
+                    std::cout << " expected " << expect[got];
+                }
+                std::cout << "\n";
+                bad = true;
+            }
+            got += 1;
+        }
+    }
+    if (got != notes) {
+        std::cout << "FAIL: sung phrase -> " << got << " notes, expected " << notes << "\n";
+        bad = true;
+    }
+    if (bad) {
+        g_failed = 1;
+    }
+}
+
 int main()
 {
     const double sampleRate = 44100.0;
@@ -195,6 +265,7 @@ int main()
                      92.4986056779f, 0.30f, 391.9954359817f, 0.12f, "G4");
     expectTwoPitches(detector, sampleRate, bufferSize,
                      110.0f, 0.25f, 261.6255653006f, 0.15f, "C4");
+    expectSungPhrase();
 
     // Half a second of E4, then a rest, is one open high-e note.
     // A loud hit with no pitch is a tap. A 40 ms blip is not a note.
@@ -226,6 +297,30 @@ int main()
             g_failed = 1;
         }
 
+        // Stopping the take writes the note still sounding, with no rest first.
+        t.reset(440.0f);
+        n = feed(t, 329.6275569129f, 0.12f, 0.50, ev, 0, 8);
+        n += t.flush(ev + n, 8 - n);
+        if (n != 1 || ev[0].tap != 0 || std::strcmp(ev[0].name, "E4") != 0
+                || ev[0].durationMs < 450 || ev[0].durationMs > 550) {
+            std::cout << "FAIL: flush open E4 -> " << n << " events";
+            if (n > 0) {
+                std::cout << " " << ev[0].name << " " << ev[0].durationMs << "ms";
+            }
+            std::cout << "\n";
+            g_failed = 1;
+        }
+
+        // Two notes with no breath are both in the take when listening stops.
+        t.reset(440.0f);
+        n = feed(t, 329.6275569129f, 0.12f, 0.40, ev, 0, 8);
+        n = feed(t, 391.9954359817f, 0.12f, 0.40, ev, n, 8);
+        n += t.flush(ev + n, 8 - n);
+        if (n != 2 || std::strcmp(ev[0].name, "E4") != 0 || std::strcmp(ev[1].name, "G4") != 0) {
+            std::cout << "FAIL: flush E4 then G4 -> " << n << " events\n";
+            g_failed = 1;
+        }
+
         t.reset(440.0f);
         n = feed(t, 329.6275569129f, 0.12f, 0.40, ev, 0, 8);
         n = feed(t, 391.9954359817f, 0.12f, 0.40, ev, n, 8);
@@ -233,6 +328,72 @@ int main()
         if (n != 2 || std::strcmp(ev[0].name, "E4") != 0 || std::strcmp(ev[1].name, "G4") != 0
                 || ev[1].guitarString != 1 || ev[1].fret != 3) {
             std::cout << "FAIL: E4 then G4 -> " << n << " events\n";
+            g_failed = 1;
+        }
+
+        // A longer second note starts when the first one ends, not when the
+        // phrase is finally released.
+        t.reset(440.0f);
+        n = feed(t, 329.6275569129f, 0.12f, 0.30, ev, 0, 8);
+        n = feed(t, 391.9954359817f, 0.12f, 0.50, ev, n, 8);
+        n = feed(t, 0.0f, 0.0f, 0.55, ev, n, 8);
+        int e4End = n >= 1 ? ev[0].startMs + ev[0].durationMs : 0;
+        if (n != 2 || std::strcmp(ev[0].name, "E4") != 0 || std::strcmp(ev[1].name, "G4") != 0
+                || ev[0].startMs > 40 || ev[1].startMs < e4End || ev[1].startMs > e4End + 120) {
+            std::cout << "FAIL: E4 then longer G4 starts";
+            if (n >= 2) {
+                std::cout << " " << ev[0].name << " " << ev[0].startMs << "+" << ev[0].durationMs
+                          << " " << ev[1].name << " " << ev[1].startMs;
+            }
+            std::cout << "\n";
+            g_failed = 1;
+        }
+
+        // A sung pitch that chatters across A and A# is still one note.
+        // Two hops on each side never holds a name for the attack time.
+        t.reset(440.0f);
+        n = 0;
+        for (int i = 0; i < 20 && n < 8; ++i) {
+            float hz = (i % 4 < 2) ? 216.0f : 237.0f;
+            n += t.push(hz, 0.12f, hop, ev + n, 8 - n);
+        }
+        n = feed(t, 0.0f, 0.0f, 0.55, ev, n, 8);
+        bool wobbleName = n == 1 && (std::strcmp(ev[0].name, "A3") == 0
+                || std::strcmp(ev[0].name, "A#3") == 0);
+        if (!wobbleName || ev[0].tap != 0) {
+            std::cout << "FAIL: semitone chatter -> " << n << " events";
+            if (n > 0) {
+                std::cout << " first " << ev[0].name << " tap " << ev[0].tap;
+            }
+            std::cout << "\n";
+            g_failed = 1;
+        }
+
+        // A third-harmonic flare in the middle of a sung note is still that note.
+        // An octave that stays is the next note.
+        t.reset(440.0f);
+        n = feed(t, 220.0f, 0.12f, 0.40, ev, 0, 8);
+        n = feed(t, 660.0f, 0.12f, 0.22, ev, n, 8);
+        n = feed(t, 220.0f, 0.12f, 0.40, ev, n, 8);
+        n = feed(t, 0.0f, 0.0f, 0.55, ev, n, 8);
+        if (n != 1 || ev[0].tap != 0 || std::strcmp(ev[0].name, "A3") != 0) {
+            std::cout << "FAIL: harmonic flare -> " << n << " events";
+            if (n > 0) {
+                std::cout << " first " << ev[0].name << " tap " << ev[0].tap;
+            }
+            std::cout << "\n";
+            g_failed = 1;
+        }
+        t.reset(440.0f);
+        n = feed(t, 220.0f, 0.12f, 0.40, ev, 0, 8);
+        n = feed(t, 440.0f, 0.12f, 0.50, ev, n, 8);
+        n = feed(t, 0.0f, 0.0f, 0.55, ev, n, 8);
+        if (n != 2 || std::strcmp(ev[0].name, "A3") != 0 || std::strcmp(ev[1].name, "A4") != 0) {
+            std::cout << "FAIL: octave that stays -> " << n << " events";
+            if (n > 0) {
+                std::cout << " first " << ev[0].name;
+            }
+            std::cout << "\n";
             g_failed = 1;
         }
 
@@ -584,6 +745,99 @@ int main()
         unsigned char out[8];
         if (writeMidi(&ev, &start, 1, out, 8) != -1) {
             std::cout << "FAIL: a short buffer should be refused\n";
+            g_failed = 1;
+        }
+    }
+
+    // Fifty cents sharp is a pitch bend, center 8192, two semitones full scale.
+    // +50 cents -> 8192 + 2048 = 10240 = E0 00 50, before the note.
+    {
+        TranscriptEvent ev{};
+        ev.midi = 69;
+        ev.cents = 50;
+        ev.durationMs = 400;
+        int start = 0;
+        unsigned char out[64];
+        int n = writeMidi(&ev, &start, 1, out, 64);
+        int bend = -1;
+        int noteOn = -1;
+        // The header's division is also 0xE0. Match the whole bend message.
+        for (int i = 0; i + 2 < n; ++i) {
+            if (bend < 0 && out[i] == 0xE0 && out[i + 1] == 0x00 && out[i + 2] == 0x50) {
+                bend = i;
+            }
+            if (out[i] == 0x90 && noteOn < 0) {
+                noteOn = i;
+            }
+        }
+        if (n < 0 || bend < 0 || noteOn < 0 || bend > noteOn) {
+            std::cout << "FAIL: sharp note bend\n";
+            g_failed = 1;
+        }
+    }
+
+    // The wheel stays where the last note left it. An in-tune note after a
+    // sharp one has to put the center back (8192 = E0 00 40) or it plays sharp.
+    {
+        TranscriptEvent ev[2]{};
+        ev[0].midi = 69;
+        ev[0].cents = 50;
+        ev[0].durationMs = 400;
+        ev[1].midi = 60;
+        ev[1].cents = 0;
+        ev[1].durationMs = 500;
+        int starts[2] = {0, 500};
+        unsigned char out[128];
+        int n = writeMidi(ev, starts, 2, out, 128);
+        int firstOn = -1;
+        int secondOn = -1;
+        int reset = -1;
+        for (int i = 0; i + 2 < n; ++i) {
+            if (out[i] == 0x90 && out[i + 1] == 69 && firstOn < 0) {
+                firstOn = i;
+            } else if (out[i] == 0x90 && out[i + 1] == 60 && secondOn < 0) {
+                secondOn = i;
+            }
+            if (reset < 0 && out[i] == 0xE0 && out[i + 1] == 0x00 && out[i + 2] == 0x40) {
+                reset = i;
+            }
+        }
+        if (n < 0 || firstOn < 0 || secondOn < 0 || reset < 0 || reset < firstOn || reset > secondOn) {
+            std::cout << "FAIL: in-tune note after a bend should center the wheel\n";
+            g_failed = 1;
+        }
+    }
+
+    // A saved take opens as the same notes, the same bend, and the same tap.
+    {
+        TranscriptEvent ev[3]{};
+        ev[0].midi = 69;
+        ev[0].cents = 50;
+        ev[0].durationMs = 400;
+        ev[1].midi = 60;
+        ev[1].cents = 0;
+        ev[1].durationMs = 500;
+        ev[2].tap = 1;
+        ev[2].durationMs = 120;
+        int starts[3] = {0, 500, 1200};
+        unsigned char out[256];
+        int n = writeMidi(ev, starts, 3, out, 256);
+        TranscriptEvent back[4]{};
+        int backStarts[4] = {};
+        int m = readMidi(out, n, back, backStarts, 4);
+        bool ok = m == 3
+                && back[0].tap == 0 && back[0].midi == 69 && back[0].cents == 50
+                && back[0].durationMs == 400 && backStarts[0] == 0
+                && back[1].tap == 0 && back[1].midi == 60 && back[1].cents == 0
+                && back[1].durationMs == 500 && backStarts[1] == 500
+                && back[2].tap == 1 && back[2].durationMs == 120 && backStarts[2] == 1200;
+        if (!ok) {
+            std::cout << "FAIL: reopen take -> " << m << " events";
+            if (m > 0) {
+                std::cout << " first midi " << back[0].midi << " cents " << back[0].cents
+                          << " " << backStarts[0] << "+" << back[0].durationMs;
+            }
+            std::cout << "\n";
             g_failed = 1;
         }
     }

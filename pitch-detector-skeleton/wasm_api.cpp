@@ -6,7 +6,6 @@
 #include "midi.h"
 #include "note.h"
 
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -16,7 +15,6 @@ namespace {
 
 PitchDetector* detector = nullptr;
 Transcriber transcriber;
-double clockSec = 0;
 std::vector<TranscriptEvent> taken;
 std::vector<int> starts;
 std::string last;
@@ -29,7 +27,6 @@ void lb_init(double sampleRate, float a4) {
     delete detector;
     detector = new PitchDetector(sampleRate > 0 ? sampleRate : 48000.0, 2048);
     transcriber.reset(a4 > 0 ? a4 : 440.0f);
-    clockSec = 0;
     taken.clear();
     starts.clear();
     last.clear();
@@ -37,7 +34,6 @@ void lb_init(double sampleRate, float a4) {
 
 void lb_reset(float a4) {
     transcriber.reset(a4 > 0 ? a4 : 440.0f);
-    clockSec = 0;
     taken.clear();
     starts.clear();
     last.clear();
@@ -62,10 +58,8 @@ const char* lb_push(float hz, float rms, double hopSec) {
     }
     TranscriptEvent ev[4];
     int n = transcriber.push(hz, rms, hopSec, ev, 4);
-    clockSec += hopSec;
-    int nowMs = static_cast<int>(std::lround(clockSec * 1000.0));
     for (int i = 0; i < n; ++i) {
-        int start = nowMs - ev[i].durationMs;
+        int start = ev[i].startMs;
         if (start < 0) {
             start = 0;
         }

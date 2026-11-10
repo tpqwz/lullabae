@@ -19,7 +19,7 @@ public final class Engine {
 
         void onNote(String name, int cents, int durationMs, int stringNum, int fret, int startMs, int midi);
 
-        void onTap();
+        void onTap(int durationMs, int startMs);
 
         void onScoreCleared();
 
@@ -190,11 +190,11 @@ public final class Engine {
     private int produced;
     private boolean joined;
     private double phase;
-    private double heardSec;
     private float shownHz;
     private int quietHops;
     private int voicedHops;
-    private String pendingName = "";
+    private int harmHops;
+    private float displayHz;
     private volatile boolean showWave;
     private int[] replayMidi = new int[0];
     private int[] replayCents = new int[0];
@@ -227,7 +227,6 @@ public final class Engine {
         openTrack(sampleRate);
         Pitch.init(sampleRate);
         Pitch.resetTranscript(referenceHz);
-        heardSec = 0;
         postClear();
         synchronized (lock) {
             running = true;
@@ -249,7 +248,6 @@ public final class Engine {
         sampleRate = rate[0];
         Pitch.init(sampleRate);
         Pitch.resetTranscript(referenceHz);
-        heardSec = 0;
         postClear();
         try {
             record.startRecording();
@@ -363,7 +361,8 @@ public final class Engine {
         int filled = 0;
         quietHops = 0;
         voicedHops = 0;
-        pendingName = "";
+        harmHops = 0;
+        displayHz = 0f;
         post("Listening", "", 0, 0f);
         while (running) {
             AudioRecord rec = record;
@@ -391,35 +390,64 @@ public final class Engine {
                     postWave();
                 }
             }
-            // A hop of room noise used to blank the screen, then the next hop painted
-            // a pitch. Hold both ways so Listen does not strobe.
-            boolean loud = filled >= WINDOW && rms >= 0.01f && shownHz > 0f;
+            // Room noise used to blank the screen every hop. A hum that wobbles
+            // across a semitone never kept one name, so the note stayed blank.
+            // Show the pitch once it is present, and ignore a short harmonic flare.
+            boolean loud = filled >= WINDOW && rms >= 0.006f && shownHz > 0f;
             if (!loud) {
                 voicedHops = 0;
-                pendingName = "";
+                harmHops = 0;
                 quietHops++;
                 if (quietHops == 8) {
+                    displayHz = 0f;
                     post("Listening", "", 0, 0f);
                 }
                 continue;
             }
             quietHops = 0;
-            String name = Pitch.noteName(shownHz, referenceHz);
-            if (name == null || name.isEmpty()) {
-                voicedHops = 0;
-                pendingName = "";
-                continue;
+            if (displayHz > 0f && harmonicOf(shownHz, displayHz)) {
+                harmHops++;
+                if (harmHops < 4) {
+                    continue;
+                }
             }
-            if (name.equals(pendingName)) {
-                voicedHops++;
-            } else {
-                pendingName = name;
+            harmHops = 0;
+            if (displayHz <= 0f || !withinCents(shownHz, displayHz, 110f)) {
+                displayHz = shownHz;
                 voicedHops = 1;
+            } else {
+                displayHz = displayHz * 0.8f + shownHz * 0.2f;
+                voicedHops++;
             }
             if (voicedHops >= 4) {
-                post("Listening", name, Pitch.cents(shownHz, referenceHz), shownHz);
+                String name = Pitch.noteName(displayHz, referenceHz);
+                if (name != null && !name.isEmpty()) {
+                    post("Listening", name, Pitch.cents(displayHz, referenceHz), displayHz);
+                }
             }
         }
+    }
+
+    private static boolean withinCents(float a, float b, float cents) {
+        if (a <= 0f || b <= 0f) {
+            return false;
+        }
+        float gap = Math.abs(1200f * (float) (Math.log(a / b) / Math.log(2.0)));
+        return gap < cents;
+    }
+
+    /** True when one pitch is the 2nd, 3rd, or 4th harmonic of the other. */
+    private static boolean harmonicOf(float a, float b) {
+        if (a <= 0f || b <= 0f) {
+            return false;
+        }
+        float ratio = a > b ? a / b : b / a;
+        for (int multiple = 2; multiple <= 4; multiple++) {
+            if (withinCents(ratio, multiple, 60f)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int noteLength(int[] note) {
@@ -511,38 +539,49 @@ public final class Engine {
         shownHz = hz;
         float hopSec = (float) (n / (double) sampleRate);
         String raw = Pitch.takeTranscript(hz, rms, hopSec, referenceHz);
-        heardSec += hopSec;
         if (raw == null || raw.isEmpty()) {
             return;
         }
         for (String line : raw.split("\n")) {
-            deliver(line, heardSec);
+            deliver(line);
         }
     }
 
-    private void deliver(String line, double endSec) {
+    /** Stop the mic and hand the note still sounding to the listener, on this thread. */
+    public void captureTail() {
+        stop();
+        String raw = Pitch.flushTranscript();
+        if (raw == null || raw.isEmpty()) {
+            return;
+        }
+        for (String line : raw.split("\n")) {
+            apply(line);
+        }
+    }
+
+    private void deliver(String line) {
+        main.post(() -> apply(line));
+    }
+
+    private void apply(String line) {
         String[] parts = line.split(" ");
-        if (parts.length == 7 && "N".equals(parts[0])) {
+        Listener l = listener;
+        if (l == null) {
+            return;
+        }
+        if (parts.length == 8 && "N".equals(parts[0])) {
             String name = parts[1];
             int cents = Integer.parseInt(parts[2]);
             int durationMs = Integer.parseInt(parts[3]);
             int stringNum = Integer.parseInt(parts[4]);
             int fret = Integer.parseInt(parts[5]);
             int midi = Integer.parseInt(parts[6]);
-            int startMs = Math.max(0, (int) Math.round(endSec * 1000.0) - durationMs);
-            main.post(() -> {
-                Listener l = listener;
-                if (l != null) {
-                    l.onNote(name, cents, durationMs, stringNum, fret, startMs, midi);
-                }
-            });
-        } else if (parts.length >= 1 && "T".equals(parts[0])) {
-            main.post(() -> {
-                Listener l = listener;
-                if (l != null) {
-                    l.onTap();
-                }
-            });
+            int startMs = Math.max(0, Integer.parseInt(parts[7]));
+            l.onNote(name, cents, durationMs, stringNum, fret, startMs, midi);
+        } else if (parts.length >= 3 && "T".equals(parts[0])) {
+            int durationMs = Integer.parseInt(parts[1]);
+            int startMs = Math.max(0, Integer.parseInt(parts[2]));
+            l.onTap(durationMs, startMs);
         }
     }
 

@@ -32,6 +32,7 @@ compile_abi() {
         "$ROOT/jni/pitch_jni.cpp" \
         "$CORE/PitchDetector.cpp" \
         "$CORE/Transcriber.cpp" \
+        "$CORE/midi.cpp" \
         "$CORE/replay.cpp"
 }
 

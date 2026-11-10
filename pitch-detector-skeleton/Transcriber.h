@@ -7,6 +7,7 @@ struct TranscriptEvent {
     int midi;
     int cents;
     int durationMs;
+    int startMs;
     int guitarString;
     int fret;
     char name[8];
@@ -26,14 +27,21 @@ public:
     // hopSec is how much time this frame covers. Returns how many events were written.
     int push(float hz, float rms, double hopSec, TranscriptEvent* out, int maxOut);
 
+    // The note still sounding, and any notes held for a breath, are the rest of the take.
+    int flush(TranscriptEvent* out, int maxOut);
+
 private:
     float a4_;
+    double clockSec_;
     int active_;
     double activeSec_;
+    double activeStart_;
     double centsSum_;
     int centsN_;
     int pending_;
     double pendingSec_;
+    int challenger_;
+    double challengerSec_;
     double sinceTap_;
     double noise_;
     double restSec_;
